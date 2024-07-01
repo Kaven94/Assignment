@@ -40,7 +40,7 @@ public class ClientApplication extends JFrame {
         JPanel controlPanel = new JPanel(new FlowLayout());
         controlPanel.add(postButton);
         controlPanel.add(scheduleTime);
-        controlPanel.add(scheduleButtonasdasasdasd);
+        controlPanel.add(scheduleButton);
 
         inputPanel.add(controlPanel, BorderLayout.CENTER);
 
