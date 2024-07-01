@@ -17,6 +17,7 @@ public class ServerApplication extends JFrame {
     private JTextArea logArea;
     private static List<ScheduledPost> scheduledPosts = new ArrayList<>();
     private static ServerApplication instance;
+    private static List<ObjectOutputStream> clientOutputStreams = new ArrayList<>();
 
     public ServerApplication() {
         setTitle("Server Logs");
@@ -39,7 +40,6 @@ public class ServerApplication extends JFrame {
 
         add(panel);
 
-        // Additional button to clear logs
         JButton clearButton = new JButton("Clear Logs");
         clearButton.addActionListener(e -> logArea.setText(""));
         JPanel buttonPanel = new JPanel();
@@ -48,13 +48,11 @@ public class ServerApplication extends JFrame {
     }
 
     public static void main(String[] args) {
-        // Ensure the instance is created and visible before starting the server socket
         SwingUtilities.invokeLater(() -> {
             instance = new ServerApplication();
             instance.setVisible(true);
         });
 
-        // Wait until instance is initialized
         while (instance == null) {
             try {
                 Thread.sleep(100);
@@ -82,6 +80,7 @@ public class ServerApplication extends JFrame {
 
     private static class ClientHandler implements Runnable {
         private Socket socket;
+        private ObjectOutputStream out;
 
         public ClientHandler(Socket socket) {
             this.socket = socket;
@@ -89,8 +88,14 @@ public class ServerApplication extends JFrame {
 
         @Override
         public void run() {
-            try (ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
-                 ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream())) {
+            try {
+                out = new ObjectOutputStream(socket.getOutputStream());
+                ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+
+                synchronized (clientOutputStreams) {
+                    clientOutputStreams.add(out);
+                }
+
                 Object obj = in.readObject();
                 if (obj instanceof ScheduledPost) {
                     ScheduledPost scheduledPost = (ScheduledPost) obj;
@@ -98,10 +103,12 @@ public class ServerApplication extends JFrame {
                     new Thread(new ScheduledPostPublisher(scheduledPost)).start();
                     out.writeObject("Success");
                     instance.log("Scheduled post received: " + scheduledPost.getContent());
+                    broadcast(scheduledPost);
                 } else if (obj instanceof Post) {
                     Post post = (Post) obj;
                     instance.log("Received post: " + post.getContent());
                     out.writeObject("Success");
+                    broadcast(post);
                 } else {
                     out.writeObject("Failure");
                     instance.log("Failed to process object");
@@ -109,6 +116,19 @@ public class ServerApplication extends JFrame {
             } catch (Exception e) {
                 instance.log("Client handler error: " + e.getMessage());
                 e.printStackTrace();
+            }
+        }
+
+        private void broadcast(Post post) {
+            synchronized (clientOutputStreams) {
+                for (ObjectOutputStream clientOut : clientOutputStreams) {
+                    try {
+                        clientOut.writeObject(post);
+                    } catch (Exception e) {
+                        instance.log("Broadcast error: " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                }
             }
         }
     }
@@ -128,10 +148,23 @@ public class ServerApplication extends JFrame {
                     Thread.sleep(delay);
                 }
                 instance.log("Publishing scheduled post: " + scheduledPost.getContent());
-                // Handle publishing post to the database
+                broadcast(scheduledPost);
             } catch (InterruptedException e) {
                 instance.log("Scheduled post publishing interrupted: " + e.getMessage());
                 e.printStackTrace();
+            }
+        }
+
+        private void broadcast(Post post) {
+            synchronized (clientOutputStreams) {
+                for (ObjectOutputStream clientOut : clientOutputStreams) {
+                    try {
+                        clientOut.writeObject(post);
+                    } catch (Exception e) {
+                        instance.log("Broadcast error: " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                }
             }
         }
     }

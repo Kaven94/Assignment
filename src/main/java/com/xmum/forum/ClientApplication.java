@@ -25,6 +25,7 @@ public class ClientApplication extends JFrame {
     private JButton scheduleButton;
     private JTextField scheduleTime;
     private JTextArea displayArea;
+    private JTextArea allPostsArea;
 
 
     public ClientApplication(long threadId) {
@@ -38,13 +39,33 @@ public class ClientApplication extends JFrame {
         postButton = new JButton("Post");
         scheduleButton = new JButton("Schedule");
         scheduleTime = new JTextField("Enter time in ms", 15);
-        displayArea = new JTextArea(10, 40);
+        displayArea = new JTextArea(5, 40);
+        displayArea.setEditable(false);
+        allPostsArea = new JTextArea(25,40);
         displayArea.setEditable(false);
 
         postButton.addActionListener(new PostButtonListener());
         scheduleButton.addActionListener(new ScheduleButtonListener());
 
+        // Add focus listener to scheduleTime
+        scheduleTime.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusGained(java.awt.event.FocusEvent e) {
+                if (scheduleTime.getText().equals("Enter time in ms")) {
+                    scheduleTime.setText("");
+                }
+            }
+
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                if (scheduleTime.getText().isEmpty()) {
+                    scheduleTime.setText("Enter time in ms");
+                }
+            }
+        });
+
         JPanel inputPanel = new JPanel(new BorderLayout());
+        inputPanel.setBorder(BorderFactory.createTitledBorder("Create Post"));
         inputPanel.add(new JScrollPane(postContent), BorderLayout.NORTH);
 
         JPanel controlPanel = new JPanel(new FlowLayout());
@@ -55,7 +76,18 @@ public class ClientApplication extends JFrame {
         inputPanel.add(controlPanel, BorderLayout.CENTER);
 
         add(inputPanel, BorderLayout.NORTH);
+
         add(new JScrollPane(displayArea), BorderLayout.CENTER);
+
+
+        // 添加用于显示所有帖子区域
+        JPanel allPostsPanel = new JPanel(new BorderLayout());
+        allPostsPanel.setBorder(BorderFactory.createTitledBorder("All Posts"));
+        allPostsPanel.add(new JScrollPane(allPostsArea), BorderLayout.CENTER);
+        add(allPostsPanel, BorderLayout.SOUTH);
+
+        // 启动一个线程来接收来自服务器的帖子
+        new Thread(new ReceivePosts()).start();
     }
 
     private class PostButtonListener implements ActionListener {
@@ -130,6 +162,28 @@ public class ClientApplication extends JFrame {
             JOptionPane.showMessageDialog(this, "Failed to send post!", "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
+
+    private class ReceivePosts implements Runnable {
+        @Override
+        public void run() {
+            try (Socket socket = new Socket("localhost", 8080);
+                 ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
+
+                while (true) {
+                    Post post = (Post) in.readObject();
+                    SwingUtilities.invokeLater(() -> {
+                        LocalDateTime now = LocalDateTime.now();
+                        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
+                        String formattedNow = now.format(formatter);
+                        allPostsArea.append(formattedNow + " >> " + post.getContent() + "\n");
+                    });
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }
+    }
+
 
     public static void main(String[] args) {
         final ExecutorService executorService = Executors.newFixedThreadPool(5); // 创建线程池
