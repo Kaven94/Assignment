@@ -5,19 +5,19 @@ import com.xmum.forum.pojo.ScheduledPost;
 
 import javax.swing.*;
 import java.awt.*;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
 
+import static java.lang.Thread.sleep;
+
 public class ServerApplication extends JFrame {
 
     private JTextArea logArea;
-    private static List<ScheduledPost> scheduledPosts = new ArrayList<>();
     private static ServerApplication instance;
-    private static List<ObjectOutputStream> clientOutputStreams = new ArrayList<>();
+    private static  List<String> posts = new ArrayList<>();
 
     public ServerApplication() {
         setTitle("Server Logs");
@@ -55,7 +55,7 @@ public class ServerApplication extends JFrame {
 
         while (instance == null) {
             try {
-                Thread.sleep(100);
+                sleep(100);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
@@ -66,12 +66,24 @@ public class ServerApplication extends JFrame {
             instance.log("Server started, waiting for connections...");
             while (true) {
                 Socket socket = serverSocket.accept();
+                instance.log("One Client Connected");
                 new Thread(new ClientHandler(socket)).start();
             }
         } catch (Exception e) {
             instance.log("Server error: " + e.getMessage());
             e.printStackTrace();
         }
+
+      /*  try (ServerSocket serverSocketBroadcast = new ServerSocket(8081)) {
+            instance.log("Server started, waiting for connections...");
+            while (true) {
+                Socket socket = serverSocketBroadcast.accept();
+                new Thread(new ClientHandler(socket)).start();
+            }
+        } catch (Exception e) {
+            instance.log("Server error: " + e.getMessage());
+            e.printStackTrace();
+        }*/
     }
 
     public void log(String message) {
@@ -92,80 +104,62 @@ public class ServerApplication extends JFrame {
                 out = new ObjectOutputStream(socket.getOutputStream());
                 ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
 
-                synchronized (clientOutputStreams) {
-                    clientOutputStreams.add(out);
-                }
-
-                Object obj = in.readObject();
-                if (obj instanceof ScheduledPost) {
-                    ScheduledPost scheduledPost = (ScheduledPost) obj;
-                    scheduledPosts.add(scheduledPost);
-                    new Thread(new ScheduledPostPublisher(scheduledPost)).start();
-                    out.writeObject("Success");
-                    instance.log("Scheduled post received: " + scheduledPost.getContent());
-                    broadcast(scheduledPost);
-                } else if (obj instanceof Post) {
-                    Post post = (Post) obj;
-                    instance.log("Received post: " + post.getContent());
-                    out.writeObject("Success");
-                    broadcast(post);
-                } else {
-                    out.writeObject("Failure");
-                    instance.log("Failed to process object");
+                while (true) {
+                    Object obj = in.readObject();
+                    if (obj instanceof ScheduledPost) {
+                        ScheduledPost scheduledPost = (ScheduledPost) obj;
+                        synchronized (posts) {
+                            posts.add(scheduledPost.getContent());
+                        }
+                        out.writeObject("Success");
+                        sleep(scheduledPost.getScheduledTime());
+                        instance.log("Scheduled post received: " + scheduledPost.getContent());
+                        instance.broadcast();
+                    } else if (obj instanceof Post) {
+                        Post post = (Post) obj;
+                        instance.log("Received post: " + post.getContent());
+                        synchronized (posts) {
+                            posts.add(post.getContent());
+                        }
+                        out.writeObject("Success");
+                        instance.broadcast();
+                    } else {
+                        out.writeObject("Failure");
+                        instance.log("Failed to process object");
+                    }
                 }
             } catch (Exception e) {
-                instance.log("Client handler error: " + e.getMessage());
+                instance.log("");
+            }
+                try {
+                    socket.close();
+                } catch (Exception e) {
+                    instance.log("Error closing socket: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        private void broadcast() {
+            String host = "localhost";
+            int port = 12345;
+
+
+            try (Socket socket = new Socket(host, port);
+                 ObjectOutputStream objectOutputStream = new ObjectOutputStream(socket.getOutputStream());
+                 ObjectInputStream objectInputStream = new ObjectInputStream(socket.getInputStream())) {
+
+                // 创建并发送 List<String>
+                objectOutputStream.writeObject(posts);
+                objectOutputStream.flush();
+
+                // 接收服务器返回的 List<String>
+                List<String> receivedList = (List<String>) objectInputStream.readObject();
+                System.out.println("Received list from server: " + receivedList);
+
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }
-
-        private void broadcast(Post post) {
-            synchronized (clientOutputStreams) {
-                for (ObjectOutputStream clientOut : clientOutputStreams) {
-                    try {
-                        clientOut.writeObject(post);
-                    } catch (Exception e) {
-                        instance.log("Broadcast error: " + e.getMessage());
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-    }
-
-    private static class ScheduledPostPublisher implements Runnable {
-        private ScheduledPost scheduledPost;
-
-        public ScheduledPostPublisher(ScheduledPost scheduledPost) {
-            this.scheduledPost = scheduledPost;
-        }
-
-        @Override
-        public void run() {
-            try {
-                long delay = scheduledPost.getScheduledTime() - System.currentTimeMillis();
-                if (delay > 0) {
-                    Thread.sleep(delay);
-                }
-                instance.log("Publishing scheduled post: " + scheduledPost.getContent());
-                broadcast(scheduledPost);
-            } catch (InterruptedException e) {
-                instance.log("Scheduled post publishing interrupted: " + e.getMessage());
-                e.printStackTrace();
-            }
-        }
-
-        private void broadcast(Post post) {
-            synchronized (clientOutputStreams) {
-                for (ObjectOutputStream clientOut : clientOutputStreams) {
-                    try {
-                        clientOut.writeObject(post);
-                    } catch (Exception e) {
-                        instance.log("Broadcast error: " + e.getMessage());
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-    }
 }
+

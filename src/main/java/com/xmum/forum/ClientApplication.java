@@ -8,15 +8,19 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.ServerSocket;
 import java.net.Socket;
 
 import static java.lang.Thread.sleep;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.List;
 
 public class ClientApplication extends JFrame {
 
@@ -25,10 +29,15 @@ public class ClientApplication extends JFrame {
     private JButton scheduleButton;
     private JTextField scheduleTime;
     private JTextArea displayArea;
-    private JTextArea allPostsArea;
+    private  JTextArea allPostsArea;
+    private static List<String> posts = new ArrayList<>();
+    private int receivePort;
 
 
-    public ClientApplication(long threadId) {
+
+    public ClientApplication(long threadId, int receivePort) {
+
+        this.receivePort = receivePort;
 
         setTitle("XMUM Forum - User " + threadId);
         setSize(1000, 800);
@@ -87,7 +96,7 @@ public class ClientApplication extends JFrame {
         add(allPostsPanel, BorderLayout.SOUTH);
 
         // 启动一个线程来接收来自服务器的帖子
-        new Thread(new ReceivePosts()).start();
+        new Thread(new ReceivePosts(receivePort)).start();
     }
 
     private class PostButtonListener implements ActionListener {
@@ -140,15 +149,16 @@ public class ClientApplication extends JFrame {
             String response = (String) in.readObject();
             if (response.equals("Success")) {
                 JOptionPane.showMessageDialog(this, "Post sent successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
-                sleep(Long.parseLong(scheduleTime));
 
                 // 获取当前时间
                 LocalDateTime now = LocalDateTime.now();
                 DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
                 String formattedNow = now.format(formatter);
+                sleep(Long.parseLong(scheduleTime));
 
-
+                sleep(Long.parseLong(scheduleTime));
                 displayArea.append(formattedNow + " >> " + content + "\n");
+
 
             } else {
                 JOptionPane.showMessageDialog(this, "Failed to send post!", "Error", JOptionPane.ERROR_MESSAGE);
@@ -163,25 +173,49 @@ public class ClientApplication extends JFrame {
         }
     }
 
+
     private class ReceivePosts implements Runnable {
+
+        private int port;
+
+        public ReceivePosts(int port) {
+            this.port = port;
+        }
         @Override
         public void run() {
-            try (Socket socket = new Socket("localhost", 8080);
-                 ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
+            try (ServerSocket serverSocket = new ServerSocket(port)) {
 
                 while (true) {
-                    Post post = (Post) in.readObject();
-                    SwingUtilities.invokeLater(() -> {
-                        LocalDateTime now = LocalDateTime.now();
-                        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
-                        String formattedNow = now.format(formatter);
-                        allPostsArea.append(formattedNow + " >> " + post.getContent() + "\n");
-                    });
+                    try (Socket socket = serverSocket.accept();
+                         ObjectInputStream objectInputStream = new ObjectInputStream(socket.getInputStream());
+                        ) {
+                        System.out.println(port + "received");
+                        // 读取数据端发送的 List<String>
+                        List<String> receivedList = (List<String>) objectInputStream.readObject();
+
+                        synchronized (posts) {
+                            posts = receivedList;
+                            updateTextArea();
+                        }
+
+
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                 }
-            } catch (Exception ex) {
-                ex.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
+    }
+
+    private void updateTextArea() {
+        SwingUtilities.invokeLater(() -> {
+            allPostsArea.setText("");  // 清空当前内容
+            for (String post : posts) {
+                allPostsArea.append(post + "\n");
+            }
+        });
     }
 
 
@@ -191,7 +225,7 @@ public class ClientApplication extends JFrame {
         executorService.submit(() -> {
             long threadId = Thread.currentThread().getId();
             SwingUtilities.invokeLater(() -> {
-                ClientApplication app1 = new ClientApplication(threadId);
+                ClientApplication app1 = new ClientApplication(threadId, 12346);
                 app1.setVisible(true);
             });
         });
@@ -199,7 +233,7 @@ public class ClientApplication extends JFrame {
         executorService.submit(() -> {
             long threadId = Thread.currentThread().getId();
             SwingUtilities.invokeLater(() -> {
-                ClientApplication app2 = new ClientApplication(threadId);
+                ClientApplication app2 = new ClientApplication(threadId, 12347);
                 app2.setVisible(true);
             });
         });
