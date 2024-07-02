@@ -24,6 +24,7 @@ import java.util.List;
 
 public class ClientApplication extends JFrame {
 
+    private final long threadId;
     private JTextArea postContent;
     private JButton postButton;
     private JButton scheduleButton;
@@ -31,13 +32,11 @@ public class ClientApplication extends JFrame {
     private JTextArea displayArea;
     private  JTextArea allPostsArea;
     private static List<String> posts = new ArrayList<>();
-    private int receivePort;
 
 
 
     public ClientApplication(long threadId, int receivePort) {
-
-        this.receivePort = receivePort;
+        this.threadId = threadId;
 
         setTitle("XMUM Forum - User " + threadId);
         setSize(1000, 800);
@@ -116,6 +115,7 @@ public class ClientApplication extends JFrame {
             // 验证 scheduleTime 是否为空或无效
             if (timeText == null || timeText.trim().isEmpty() || !timeText.matches("\\d+")) {
                 JOptionPane.showMessageDialog(null, "Please enter a valid time in milliseconds.", "Invalid Time", JOptionPane.ERROR_MESSAGE);
+                return;
             }
 
             sendPost(content, timeText);
@@ -137,9 +137,9 @@ public class ClientApplication extends JFrame {
             Post post;
             if (scheduleTime == null) {
                 scheduleTime = "0";
-                post = new Post(content);
+                post = new Post("User " + threadId + ": " + content);
             } else {
-                post = new ScheduledPost(content, Long.parseLong(scheduleTime));
+                post = new ScheduledPost("User " + threadId + ": " + content, Long.parseLong(scheduleTime));
             }
 
             out.writeObject(post);
@@ -156,15 +156,12 @@ public class ClientApplication extends JFrame {
                 String formattedNow = now.format(formatter);
                 sleep(Long.parseLong(scheduleTime));
 
-                sleep(Long.parseLong(scheduleTime));
                 displayArea.append(formattedNow + " >> " + content + "\n");
 
 
             } else {
                 JOptionPane.showMessageDialog(this, "Failed to send post!", "Error", JOptionPane.ERROR_MESSAGE);
             }
-
-
 
         } catch (Exception ex) {
             ex.printStackTrace();
