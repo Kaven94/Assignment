@@ -5,6 +5,8 @@ import com.xmum.forum.pojo.ScheduledPost;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -27,9 +29,10 @@ public class ServerApplication extends JFrame {
 
         logArea = new JTextArea(20, 50);
         logArea.setEditable(false);
-        logArea.setFont(new Font("Monospaced", Font.PLAIN, 14));
+        logArea.setFont(new Font("Simhei", Font.PLAIN, 36));
         logArea.setBackground(Color.BLACK);
         logArea.setForeground(Color.GREEN);
+        logArea.setLineWrap(true);
 
         JScrollPane scrollPane = new JScrollPane(logArea);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
@@ -41,6 +44,22 @@ public class ServerApplication extends JFrame {
         add(panel);
 
         JButton clearButton = new JButton("Clear Logs");
+        clearButton.setPreferredSize(new Dimension(240, 60));
+        clearButton.setFont(new Font("Microsoft Yahei", Font.BOLD, 36));
+        clearButton.setBackground(Color.BLACK);
+        clearButton.setForeground(Color.CYAN);
+        clearButton.setBorder(BorderFactory.createLineBorder(Color.CYAN, 1));
+        clearButton.setFocusPainted(false);
+        clearButton.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                clearButton.setBackground(Color.RED);
+            }
+            @Override
+            public void mouseExited(MouseEvent e) {
+                clearButton.setBackground(Color.BLACK);
+            }
+        });
         clearButton.addActionListener(e -> logArea.setText(""));
         JPanel buttonPanel = new JPanel();
         buttonPanel.add(clearButton);
@@ -66,7 +85,6 @@ public class ServerApplication extends JFrame {
             instance.log("Server started, waiting for connections...");
             while (true) {
                 Socket socket = serverSocket.accept();
-                instance.log("One Client Connected");
                 new Thread(new ClientHandler(socket)).start();
             }
         } catch (Exception e) {
@@ -108,13 +126,27 @@ public class ServerApplication extends JFrame {
                     Object obj = in.readObject();
                     if (obj instanceof ScheduledPost) {
                         ScheduledPost scheduledPost = (ScheduledPost) obj;
-                        synchronized (posts) {
-                            posts.add(scheduledPost.getContent());
-                        }
                         out.writeObject("Success");
-                        sleep(scheduledPost.getScheduledTime());
-                        instance.log("Scheduled post received: " + scheduledPost.getContent());
-                        instance.broadcast();
+
+                        // 使用 SwingWorker 在后台线程中处理 sleep 操作
+                        long delay = scheduledPost.getScheduledTime();
+                        new SwingWorker<Void, Void>() {
+                            @Override
+                            protected Void doInBackground() throws Exception {
+                                sleep(delay);
+                                return null;
+                            }
+
+                            @Override
+                            protected void done() {
+                                // 获取当前时间
+                                instance.log("Scheduled post received: " + scheduledPost.getContent());
+                                synchronized (posts) {
+                                    posts.add(scheduledPost.getContent());
+                                }
+                                instance.broadcast();
+                            }
+                        }.execute();
                     } else if (obj instanceof Post) {
                         Post post = (Post) obj;
                         instance.log("Received post: " + post.getContent());

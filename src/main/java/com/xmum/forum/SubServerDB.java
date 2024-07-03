@@ -1,6 +1,7 @@
 package com.xmum.forum;
 
 import javax.swing.*;
+import java.awt.*;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -51,10 +52,15 @@ public class SubServerDB {
     private static void createAndShowGUI() {
         JFrame frame = new JFrame("Posts Viewer");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(400, 300);
+        frame.setSize(1000, 800);
+        frame.setLocationRelativeTo(null);
 
         textArea = new JTextArea();
         textArea.setEditable(false);
+        textArea.setFont(new Font("Monospaced", Font.PLAIN, 30));
+        textArea.setBackground(Color.BLACK);
+        textArea.setForeground(Color.GREEN);
+        textArea.setLineWrap(true);
 
         JScrollPane scrollPane = new JScrollPane(textArea);
         frame.add(scrollPane);

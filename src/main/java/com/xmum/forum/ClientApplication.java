@@ -2,12 +2,16 @@ package com.xmum.forum;
 
 import com.xmum.forum.pojo.Post;
 import com.xmum.forum.pojo.ScheduledPost;
-
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import javax.swing.*;
 import java.awt.*;
+import javax.swing.border.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -30,27 +34,82 @@ public class ClientApplication extends JFrame {
     private JButton scheduleButton;
     private JTextField scheduleTime;
     private JTextArea displayArea;
-    private  JTextArea allPostsArea;
+    private JTextArea allPostsArea;
     private static List<String> posts = new ArrayList<>();
-
-
+    private static final Lock lock = new ReentrantLock(); // 添加锁
 
     public ClientApplication(long threadId, int receivePort) {
         this.threadId = threadId;
 
         setTitle("XMUM Forum - User " + threadId);
-        setSize(1000, 800);
+        setSize(1600, 1000);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
+        JLabel userInfomation = new JLabel("Current User: User " + threadId);
+        userInfomation.setFont(new Font("Arial", Font.BOLD, 24));
+        userInfomation.setForeground(Color.RED);
+
         postContent = new JTextArea(5, 30);
+        postContent.setFont(new Font("Arial", Font.PLAIN, 24));
+        postContent.setBackground(new Color(135,206,250));
+        postContent.setLineWrap(true);
+
         postButton = new JButton("Post");
+        postButton.setPreferredSize(new Dimension(80, 40));
+        postButton.setFont(new Font("Arial", Font.BOLD, 20));
+        postButton.setBackground(Color.LIGHT_GRAY);
+        postButton.setForeground(Color.BLACK);
+        postButton.setBorder(BorderFactory.createLineBorder(Color.BLACK, 1));
+        postButton.setFocusPainted(false);
+        postButton.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                postButton.setBackground(Color.GRAY);
+            }
+            @Override
+            public void mouseExited(MouseEvent e) {
+                postButton.setBackground(Color.LIGHT_GRAY);
+            }
+        });
+
         scheduleButton = new JButton("Schedule");
-        scheduleTime = new JTextField("Enter time in ms", 15);
-        displayArea = new JTextArea(5, 40);
+        scheduleButton.setPreferredSize(new Dimension(120, 40));
+        scheduleButton.setFont(new Font("Arial", Font.BOLD, 20));
+        scheduleButton.setBackground(Color.LIGHT_GRAY);
+        scheduleButton.setForeground(Color.BLACK);
+        scheduleButton.setBorder(BorderFactory.createLineBorder(Color.BLACK, 1));
+        scheduleButton.setFocusPainted(false);
+        scheduleButton.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                scheduleButton.setBackground(Color.GRAY);
+            }
+            @Override
+            public void mouseExited(MouseEvent e) {
+                scheduleButton.setBackground(Color.LIGHT_GRAY);
+            }
+        });
+
+        scheduleTime = new JTextField(" Enter time in ms", 10);
+        scheduleTime.setFont(new Font("Arial", Font.BOLD, 18));
+        scheduleTime.setPreferredSize(new Dimension(200, 30));
+        scheduleTime.setBackground(Color.WHITE);
+        scheduleTime.setForeground(Color.BLACK);
+        scheduleTime.setBorder(BorderFactory.createLineBorder(Color.BLACK, 1));
+
+
+        displayArea = new JTextArea(15, 40);
+        displayArea.setFont(new Font("Arial", Font.PLAIN, 24));
+        displayArea.setBackground(new Color(144,238,144));
+        displayArea.setLineWrap(true);
         displayArea.setEditable(false);
+
         allPostsArea = new JTextArea(25,40);
-        displayArea.setEditable(false);
+        allPostsArea.setFont(new Font("Arial", Font.PLAIN, 24));
+        allPostsArea.setBackground(new Color(144,238,144));
+        allPostsArea.setLineWrap(true);
+        allPostsArea.setEditable(false);
 
         postButton.addActionListener(new PostButtonListener());
         scheduleButton.addActionListener(new ScheduleButtonListener());
@@ -59,41 +118,57 @@ public class ClientApplication extends JFrame {
         scheduleTime.addFocusListener(new java.awt.event.FocusAdapter() {
             @Override
             public void focusGained(java.awt.event.FocusEvent e) {
-                if (scheduleTime.getText().equals("Enter time in ms")) {
+                if (scheduleTime.getText().equals(" Enter time in ms")) {
                     scheduleTime.setText("");
+                    scheduleTime.setBackground(Color.LIGHT_GRAY);
                 }
             }
 
             @Override
             public void focusLost(java.awt.event.FocusEvent e) {
                 if (scheduleTime.getText().isEmpty()) {
-                    scheduleTime.setText("Enter time in ms");
+                    scheduleTime.setText(" Enter time in ms");
+                    scheduleTime.setBackground(Color.WHITE);
                 }
             }
         });
 
+        JPanel UserPanel = new JPanel(new BorderLayout());
+        UserPanel.add(userInfomation, BorderLayout.NORTH);
+
         JPanel inputPanel = new JPanel(new BorderLayout());
-        inputPanel.setBorder(BorderFactory.createTitledBorder("Create Post"));
-        inputPanel.add(new JScrollPane(postContent), BorderLayout.NORTH);
+        TitledBorder titledBorder1 = BorderFactory.createTitledBorder("Create Post");
+        titledBorder1.setTitleFont(titledBorder1.getTitleFont().deriveFont(Font.BOLD, 16));
+        inputPanel.setBorder(titledBorder1);
+        inputPanel.add(new JScrollPane(postContent), BorderLayout.CENTER);
 
         JPanel controlPanel = new JPanel(new FlowLayout());
         controlPanel.add(postButton);
         controlPanel.add(scheduleTime);
         controlPanel.add(scheduleButton);
 
-        inputPanel.add(controlPanel, BorderLayout.CENTER);
+        inputPanel.add(controlPanel, BorderLayout.SOUTH);
+        UserPanel.add(inputPanel, BorderLayout.CENTER);
+        add(UserPanel, BorderLayout.WEST);
 
-        add(inputPanel, BorderLayout.NORTH);
+        JPanel displayPanel = new JPanel(new BorderLayout());
 
-        add(new JScrollPane(displayArea), BorderLayout.CENTER);
-
+        JPanel yourPostsPanel = new JPanel(new BorderLayout());
+        TitledBorder titledBorder2 = BorderFactory.createTitledBorder("Your Posts");
+        titledBorder2.setTitleFont(titledBorder2.getTitleFont().deriveFont(Font.BOLD, 16));
+        yourPostsPanel.setBorder(titledBorder2);
+        yourPostsPanel.add(new JScrollPane(displayArea), BorderLayout.CENTER);
+        displayPanel.add(yourPostsPanel, BorderLayout.NORTH);
 
         // 添加用于显示所有帖子区域
         JPanel allPostsPanel = new JPanel(new BorderLayout());
-        allPostsPanel.setBorder(BorderFactory.createTitledBorder("All Posts"));
+        TitledBorder titledBorder3 = BorderFactory.createTitledBorder("All Posts");
+        titledBorder3.setTitleFont(titledBorder3.getTitleFont().deriveFont(Font.BOLD, 16));
+        allPostsPanel.setBorder(titledBorder3);
         allPostsPanel.add(new JScrollPane(allPostsArea), BorderLayout.CENTER);
-        add(allPostsPanel, BorderLayout.SOUTH);
+        displayPanel.add(allPostsPanel, BorderLayout.CENTER);
 
+        add(displayPanel, BorderLayout.CENTER);
         // 启动一个线程来接收来自服务器的帖子
         new Thread(new ReceivePosts(receivePort)).start();
     }
@@ -150,14 +225,24 @@ public class ClientApplication extends JFrame {
             if (response.equals("Success")) {
                 JOptionPane.showMessageDialog(this, "Post sent successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
 
-                // 获取当前时间
-                LocalDateTime now = LocalDateTime.now();
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
-                String formattedNow = now.format(formatter);
-                sleep(Long.parseLong(scheduleTime));
+                // 使用 SwingWorker 在后台线程中处理 sleep 操作
+                long delay = Long.parseLong(scheduleTime);
+                new SwingWorker<Void, Void>() {
+                    @Override
+                    protected Void doInBackground() throws Exception {
+                        sleep(delay);
+                        return null;
+                    }
 
-                displayArea.append(formattedNow + " >> " + content + "\n");
-
+                    @Override
+                    protected void done() {
+                        // 获取当前时间
+                        LocalDateTime now = LocalDateTime.now();
+                        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
+                        String formattedNow = now.format(formatter);
+                        displayArea.append(formattedNow + " >> " + content + "\n");
+                    }
+                }.execute();
 
             } else {
                 JOptionPane.showMessageDialog(this, "Failed to send post!", "Error", JOptionPane.ERROR_MESSAGE);
@@ -189,12 +274,13 @@ public class ClientApplication extends JFrame {
                         System.out.println(port + "received");
                         // 读取数据端发送的 List<String>
                         List<String> receivedList = (List<String>) objectInputStream.readObject();
-
-                        synchronized (posts) {
+                        lock.lock(); // 锁定
+                        try {
                             posts = receivedList;
                             updateTextArea();
+                        } finally {
+                            lock.unlock(); // 解锁
                         }
-
 
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -208,11 +294,50 @@ public class ClientApplication extends JFrame {
 
     private void updateTextArea() {
         SwingUtilities.invokeLater(() -> {
-            allPostsArea.setText("");  // 清空当前内容
-            for (String post : posts) {
-                allPostsArea.append(post + "\n");
+            allPostsArea.removeAll(); // Clear current content
+            allPostsArea.setLayout(new BoxLayout(allPostsArea, BoxLayout.Y_AXIS));
+            lock.lock(); // Lock
+
+            try {
+                for (String post : posts) {
+                    JPanel postPanel = new JPanel();
+                    postPanel.setLayout(new BorderLayout());
+
+                    // Set a fixed preferred size for each post panel
+                    postPanel.setPreferredSize(new Dimension(allPostsArea.getWidth(), 10));
+
+                    // Add border
+                    postPanel.setBorder(new LineBorder(Color.BLACK, 1));
+
+                    JTextArea postText = new JTextArea(post);
+                    postText.setEditable(false);
+
+                    JButton viewButton = new JButton("View");
+                    viewButton.addActionListener(e -> viewPostDetail(post));
+
+                    postPanel.add(postText, BorderLayout.CENTER);
+                    postPanel.add(viewButton, BorderLayout.EAST);
+
+                    allPostsArea.add(postPanel);
+                }
+            } finally {
+                lock.unlock(); // Unlock
             }
+            allPostsArea.revalidate();
+            allPostsArea.repaint();
         });
+    }
+
+    private void viewPostDetail(String post) {
+        JFrame postDetailFrame = new JFrame("Post Detail");
+        postDetailFrame.setSize(400, 300);
+        postDetailFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+
+        JTextArea postDetailText = new JTextArea(post);
+        postDetailText.setEditable(false);
+
+        postDetailFrame.add(new JScrollPane(postDetailText));
+        postDetailFrame.setVisible(true);
     }
 
 
